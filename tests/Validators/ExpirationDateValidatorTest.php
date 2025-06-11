@@ -13,6 +13,7 @@ use DateTime;
 class ExpirationDateValidatorTest extends TestCase
 {
     private ExpirationDateValidator $validator;
+    private array $validResult = ['valid' => true, 'message' => ''];
 
     protected function setUp(): void
     {
@@ -39,7 +40,7 @@ class ExpirationDateValidatorTest extends TestCase
         // Add next month, current year if not December
         if ($currentMonth < 12) {
             $dates[] = [$currentMonth + 1, $currentYear];
-        } else { // If December, use Jan of next year (already covered, but good for clarity)
+        } else { // If December, use Jan of next year
             $dates[] = [1, $currentYear + 1];
         }
         // Add current month, current year (should be valid)
@@ -67,6 +68,7 @@ class ExpirationDateValidatorTest extends TestCase
         if ($currentMonth > 1) {
             $dates[] = [$currentMonth - 1, $currentYear];
         } else { // If January, use Dec of previous year
+            // This case will have expiration year in the past
             $dates[] = [12, $currentYear - 1];
         }
         return $dates;
@@ -92,97 +94,118 @@ class ExpirationDateValidatorTest extends TestCase
      * @dataProvider validFutureDatesProvider
      * @param int $month Expiration month.
      * @param int $year Expiration year.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
     public function testValidExpirationDates(int $month, int $year): void
     {
         $card = new CreditCard('1234567890123456', 'Test Holder', $month, $year, '123');
-        $this->assertTrue($this->validator->validate($card), "Failed for valid date: {$month}/{$year}");
+        $this->assertSame($this->validResult, $this->validator->validate($card), "Failed for valid date: {$month}/{$year}");
     }
 
     /**
      * @dataProvider pastDatesProvider
-     * @param int $month Expiration month.
-     * @param int $year Expiration year.
+     * @param int $expMonth Expiration month.
+     * @param int $expYear Expiration year.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
-    public function testInvalidExpirationDatesPast(int $month, int $year): void
+    public function testInvalidExpirationDatesPast(int $expMonth, int $expYear): void
     {
-        $card = new CreditCard('1234567890123456', 'Test Holder', $month, $year, '123');
-        $this->assertFalse($this->validator->validate($card), "Passed for past date: {$month}/{$year}");
+        $card = new CreditCard('1234567890123456', 'Test Holder', $expMonth, $expYear, '123');
+        $result = $this->validator->validate($card);
+
+        $this->assertFalse($result['valid']);
+
+        $currentDate = new DateTime();
+        $currentYear = (int)$currentDate->format('Y');
+        $currentMonth = (int)$currentDate->format('m');
+
+        if ($expYear < $currentYear) {
+            $this->assertEquals('Card has expired. Expiration year is in the past.', $result['message'], "Incorrect message for past year: {$expMonth}/{$expYear}");
+        } elseif ($expYear === $currentYear && $expMonth < $currentMonth) {
+            $this->assertEquals('Card has expired.', $result['message'], "Incorrect message for past month, current year: {$expMonth}/{$expYear}");
+        } else {
+            // This case should ideally not be hit if data provider and validator logic are aligned.
+            // However, it's a fallback to ensure the test provides some detail if a case is missed.
+            $this->markTestIncomplete("Date {$expMonth}/{$expYear} resulted in unexpected valid=false state or message: '{$result['message']}'. Check provider and validator logic.");
+        }
     }
 
     /**
      * @dataProvider invalidMonthsProvider
      * @param int $month Invalid expiration month.
      * @param int $year Expiration year.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
     public function testInvalidExpirationMonth(int $month, int $year): void
     {
         $card = new CreditCard('1234567890123456', 'Test Holder', $month, $year, '123');
-        $this->assertFalse($this->validator->validate($card), "Passed for invalid month: {$month}/{$year}");
+        $expected = ['valid' => false, 'message' => 'Invalid expiration month.'];
+        $this->assertSame($expected, $this->validator->validate($card), "Passed for invalid month: {$month}/{$year}");
     }
 
     /**
      * Tests current month, future year.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
     public function testCurrentMonthFutureYearIsValid(): void
     {
         $currentMonth = (int)(new DateTime())->format('m');
         $futureYear = (int)(new DateTime())->format('Y') + 1;
         $card = new CreditCard('1234567890123456', 'Test Holder', $currentMonth, $futureYear, '123');
-        $this->assertTrue($this->validator->validate($card), "Failed for current month {$currentMonth}, future year {$futureYear}");
+        $this->assertSame($this->validResult, $this->validator->validate($card), "Failed for current month {$currentMonth}, future year {$futureYear}");
     }
 
     /**
      * Tests current month, current year.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
     public function testCurrentMonthAndYearIsValid(): void
     {
         $currentMonth = (int)(new DateTime())->format('m');
         $currentYear = (int)(new DateTime())->format('Y');
         $card = new CreditCard('1234567890123456', 'Test Holder', $currentMonth, $currentYear, '123');
-        $this->assertTrue($this->validator->validate($card), "Failed for current month {$currentMonth}, current year {$currentYear}");
+        $this->assertSame($this->validResult, $this->validator->validate($card), "Failed for current month {$currentMonth}, current year {$currentYear}");
     }
 
     /**
      * Tests previous month, current year.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
     public function testLastMonthCurrentYearIsInvalid(): void
     {
         $currentDate = new DateTime();
         $currentYear = (int)$currentDate->format('Y');
-        
-        // Handle January case: previous month is December of the previous year
-        if ((int)$currentDate->format('m') === 1) {
+        $lastMonth = (int)$currentDate->format('m') - 1;
+        $yearForTest = $currentYear;
+
+        if ($lastMonth < 1) { // Handles January, making previous month December of previous year
             $lastMonth = 12;
             $yearForTest = $currentYear - 1;
+            $expectedMessage = 'Card has expired. Expiration year is in the past.';
         } else {
-            $lastMonth = (int)$currentDate->format('m') - 1;
-            $yearForTest = $currentYear;
+            $expectedMessage = 'Card has expired.';
         }
 
         $card = new CreditCard('1234567890123456', 'Test Holder', $lastMonth, $yearForTest, '123');
-        $this->assertFalse($this->validator->validate($card), "Passed for last month {$lastMonth}, year {$yearForTest}");
+        $expected = ['valid' => false, 'message' => $expectedMessage];
+        $this->assertSame($expected, $this->validator->validate($card), "Passed for last month {$lastMonth}, year {$yearForTest}");
     }
-    
+
     /**
      * Tests that a card expiring in the current month and year is valid,
      * as it's valid for the entire expiration month.
+     * @covers \App\Validators\ExpirationDateValidator::validate
      */
     public function testValidExpirationAtEndOfMonth(): void
     {
-        // Assuming today is any day of the month.
-        // A card expiring this month/year should be valid.
         $currentMonth = (int)(new DateTime())->format('m');
         $currentYear = (int)(new DateTime())->format('Y');
 
         $card = new CreditCard('1234567890123456', 'Test Holder', $currentMonth, $currentYear, '123');
-        $this->assertTrue(
+        $this->assertSame(
+            $this->validResult,
             $this->validator->validate($card),
             "Failed for card expiring current month/year: {$currentMonth}/{$currentYear}. Card should be valid through the end of the month."
         );
-
-        // Test for a specific scenario: If today is Nov 15, 2023, an expiry of 11/2023 should be valid.
-        // This is covered by the general case above but can be explicitly stated if desired.
-        // For the purpose of this test, the dynamic currentMonth/currentYear is sufficient.
     }
 }
