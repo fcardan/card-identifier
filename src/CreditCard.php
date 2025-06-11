@@ -6,6 +6,7 @@ use App\Validators\CardTypeValidator;
 use App\Validators\CvvValidator;
 use App\Validators\ExpirationDateValidator;
 use App\Validators\LuhnValidator;
+use App\Validators\ValidatorInterface; // Added for type hinting the array
 
 /**
  * Represents a credit card.
@@ -101,28 +102,63 @@ class CreditCard
     }
 
     /**
-     * Validates the credit card against a series of validators.
+     * Validates the credit card and returns a detailed report.
      *
-     * This method checks the card's validity using Luhn algorithm,
-     * card type, expiration date, and CVV.
+     * The report includes an overall validity status and individual results from each validator.
+     *
+     * @return array{
+     *     overall_valid: bool,
+     *     details: array{
+     *         luhn: array{valid: bool, message: string},
+     *         card_type: array{valid: bool, message: string},
+     *         expiration_date: array{valid: bool, message: string},
+     *         cvv: array{valid: bool, message: string}
+     *     },
+     *     messages: string[]
+     * } The validation report.
+     */
+    public function getValidationReport(): array
+    {
+        $validators = [
+            'luhn' => new LuhnValidator(),
+            'card_type' => new CardTypeValidator(),
+            'expiration_date' => new ExpirationDateValidator(),
+            'cvv' => new CvvValidator(),
+        ];
+
+        $reportDetails = [];
+        $errorMessages = [];
+        $overallValid = true;
+
+        /** @var ValidatorInterface $validator */
+        foreach ($validators as $key => $validator) {
+            $result = $validator->validate($this);
+            $reportDetails[$key] = $result;
+            if (!$result['valid']) {
+                $overallValid = false;
+                if (!empty($result['message'])) {
+                    $errorMessages[] = $result['message'];
+                }
+            }
+        }
+
+        return [
+            'overall_valid' => $overallValid,
+            'details' => $reportDetails,
+            'messages' => $errorMessages,
+        ];
+    }
+
+    /**
+     * Checks if the credit card is valid based on all configured validators.
+     *
+     * This method now utilizes getValidationReport() to determine overall validity.
      *
      * @return bool True if all validation checks pass, false otherwise.
      */
     public function isValid(): bool
     {
-        $validators = [
-            new LuhnValidator(),
-            new CardTypeValidator(),
-            new ExpirationDateValidator(),
-            new CvvValidator(),
-        ];
-
-        foreach ($validators as $validator) {
-            if (!$validator->validate($this)) {
-                return false;
-            }
-        }
-
-        return true;
+        $report = $this->getValidationReport();
+        return $report['overall_valid'];
     }
 }

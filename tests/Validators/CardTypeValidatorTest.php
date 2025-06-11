@@ -12,6 +12,9 @@ use PHPUnit\Framework\TestCase;
 class CardTypeValidatorTest extends TestCase
 {
     private CardTypeValidator $validator;
+    private array $validResult = ['valid' => true, 'message' => ''];
+    private array $invalidResult = ['valid' => false, 'message' => 'Invalid or unsupported card type. Only Visa and Mastercard are currently supported.'];
+
 
     protected function setUp(): void
     {
@@ -96,7 +99,7 @@ class CardTypeValidatorTest extends TestCase
     }
 
     /**
-     * Provides card numbers with spaces/hyphens to test stripping.
+     * Provides card numbers with spaces/hyphens to test stripping and their expected validity.
      * @return array<array{string, bool}>
      */
     public function numbersWithFormattingProvider(): array
@@ -120,61 +123,68 @@ class CardTypeValidatorTest extends TestCase
     /**
      * @dataProvider validVisaProvider
      * @param string $cardNumber A valid Visa card number.
+     * @covers \App\Validators\CardTypeValidator::validate
      */
     public function testValidVisaCards(string $cardNumber): void
     {
         $card = new CreditCard($cardNumber, 'Test Holder', 12, 2030, '123');
-        $this->assertTrue($this->validator->validate($card), "Failed for valid Visa: {$cardNumber}");
+        $this->assertSame($this->validResult, $this->validator->validate($card), "Failed for valid Visa: {$cardNumber}");
     }
 
     /**
      * @dataProvider invalidVisaProvider
      * @param string $cardNumber An invalid Visa card number.
+     * @covers \App\Validators\CardTypeValidator::validate
      */
     public function testInvalidVisaCards(string $cardNumber): void
     {
         $card = new CreditCard($cardNumber, 'Test Holder', 12, 2030, '123');
-        $this->assertFalse($this->validator->validate($card), "Passed for invalid Visa: {$cardNumber}");
+        $this->assertSame($this->invalidResult, $this->validator->validate($card), "Passed for invalid Visa: {$cardNumber}");
     }
 
     /**
      * @dataProvider validMastercardProvider
      * @param string $cardNumber A valid Mastercard number.
+     * @covers \App\Validators\CardTypeValidator::validate
      */
     public function testValidMastercardCards(string $cardNumber): void
     {
         $card = new CreditCard($cardNumber, 'Test Holder', 12, 2030, '123');
-        $this->assertTrue($this->validator->validate($card), "Failed for valid Mastercard: {$cardNumber}");
+        $this->assertSame($this->validResult, $this->validator->validate($card), "Failed for valid Mastercard: {$cardNumber}");
     }
 
     /**
      * @dataProvider invalidMastercardProvider
      * @param string $cardNumber An invalid Mastercard number.
+     * @covers \App\Validators\CardTypeValidator::validate
      */
     public function testInvalidMastercardCards(string $cardNumber): void
     {
         $card = new CreditCard($cardNumber, 'Test Holder', 12, 2030, '123');
-        $this->assertFalse($this->validator->validate($card), "Passed for invalid Mastercard: {$cardNumber}");
+        $this->assertSame($this->invalidResult, $this->validator->validate($card), "Passed for invalid Mastercard: {$cardNumber}");
     }
 
     /**
      * @dataProvider otherCardNumbersProvider
      * @param string $cardNumber A card number that is not Visa or Mastercard.
+     * @covers \App\Validators\CardTypeValidator::validate
      */
     public function testOtherCardNumbers(string $cardNumber): void
     {
         $card = new CreditCard($cardNumber, 'Test Holder', 12, 2030, '123');
-        $this->assertFalse($this->validator->validate($card), "Passed for non-Visa/Mastercard: {$cardNumber}");
+        $this->assertSame($this->invalidResult, $this->validator->validate($card), "Passed for non-Visa/Mastercard: {$cardNumber}");
     }
 
     /**
      * @dataProvider numbersWithFormattingProvider
      * @param string $cardNumber Card number with spaces or hyphens.
-     * @param bool $expectedValidity Expected validation result.
+     * @param bool $expectedValidity Expected boolean part of the validation result.
+     * @covers \App\Validators\CardTypeValidator::validate
      */
     public function testCardNumbersWithSpacesAndHyphens(string $cardNumber, bool $expectedValidity): void
     {
         $card = new CreditCard($cardNumber, 'Test Holder', 12, 2030, '123');
-        $this->assertSame($expectedValidity, $this->validator->validate($card), "Validation with formatting failed for: {$cardNumber}");
+        $expectedResult = $expectedValidity ? $this->validResult : $this->invalidResult;
+        $this->assertSame($expectedResult, $this->validator->validate($card), "Validation with formatting failed for: {$cardNumber}");
     }
 }

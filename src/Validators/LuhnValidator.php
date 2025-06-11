@@ -13,15 +13,17 @@ class LuhnValidator implements ValidatorInterface
      * Validates a credit card using the Luhn algorithm.
      *
      * @param CreditCard $card The credit card to validate.
-     * @return bool True if the credit card number is valid according to the Luhn algorithm, false otherwise.
+     * @return array{valid: bool, message: string} An array indicating validity and a message.
+     *         'valid' is true if the Luhn checksum is correct, false otherwise.
+     *         'message' is 'Invalid Luhn checksum.' if invalid, or empty if valid.
      */
-    public function validate(CreditCard $card): bool
+    public function validate(CreditCard $card): array
     {
         $cardNumber = $card->getCardNumber();
         $cardNumber = strrev(preg_replace('/[^\d]/', '', $cardNumber)); // 1. Reverse and remove non-digits
 
         if (empty($cardNumber)) {
-            return false;
+            return ['valid' => false, 'message' => 'Invalid Luhn checksum. Card number is empty.'];
         }
 
         $sum = 0;
@@ -37,6 +39,10 @@ class LuhnValidator implements ValidatorInterface
             $sum += $digit; // 4. Sum all digits
         }
 
-        return ($sum % 10 === 0); // 5. If sum is a multiple of 10, it's valid
+        if ($sum % 10 === 0) { // 5. If sum is a multiple of 10, it's valid
+            return ['valid' => true, 'message' => ''];
+        } else {
+            return ['valid' => false, 'message' => 'Invalid Luhn checksum.'];
+        }
     }
 }

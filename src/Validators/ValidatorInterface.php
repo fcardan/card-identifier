@@ -15,7 +15,9 @@ interface ValidatorInterface
      * Validates a credit card.
      *
      * @param CreditCard $card The credit card to validate.
-     * @return bool True if the credit card is valid, false otherwise.
+     * @return array{valid: bool, message: string} An array with two keys:
+     *         'valid' (bool): True if validation passes, false otherwise.
+     *         'message' (string): An error message if validation fails, or an empty string if it passes.
      */
-    public function validate(CreditCard $card): bool;
+    public function validate(CreditCard $card): array;
 }
